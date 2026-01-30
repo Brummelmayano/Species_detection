@@ -1,0 +1,37 @@
+# backend/.gitignore
+
+# Ignore les fichiers de configuration
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+venv
+
+# Ignore les fichiers de build
+/dist
+/build
+node_modules
+
+# Ignore les fichiers temporaires
+*.log
+*.pyc
+*.cache
+
+# Ignore les fichiers de versionning
+*.egg-info
+__pycache__
+*.egg
+
+# Ignore les fichiers de déploiement
+*.pem
+*.key
+
+# Ignore les fichiers de serveur de développement
+*.DS_Store
+
+# Ignore les fichiers spécifiques à votre projet
+*.jpg
+*.png
+*.csv

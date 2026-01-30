@@ -1,0 +1,21 @@
+# BMM Workflow Status
+# Initialisé pour le suivi du workflow BMM
+
+status: initialized
+workflow: BMM
+generated: "2026-01-20"
+project: "Species_detection"
+
+phases:
+  - phase: 1
+    name: "Analysis"
+    status: completed
+  - phase: 2
+    name: "Planning"
+    status: completed
+  - phase: 3
+    name: "Solutioning"
+    status: completed
+  - phase: 4
+    name: "Implementation"
+    status: in_progress
