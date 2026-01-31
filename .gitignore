@@ -92,7 +92,7 @@ yarn-debug.log*
 yarn-error.log*
 
 .github
-/bmad
+/_bmad
 .kilocodemodes
 .vscode
 /_bmad-output
