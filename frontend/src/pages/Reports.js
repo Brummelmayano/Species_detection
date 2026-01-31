@@ -1,28 +1,50 @@
-import React, { useState } from 'react';
-import { Box, Typography, Grid, Card, CardContent, FormControl, InputLabel, Select, MenuItem, TextField, Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper } from '@mui/material';
+import React, { useState, useEffect } from 'react';
+import { Grid, Box, Typography, Card, CardContent, FormControl, InputLabel, Select, MenuItem, TextField, Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Alert, CircularProgress } from '@mui/material';
+import apiClient from '../config/api';
 
 const Reports = () => {
-  const [reportType, setReportType] = useState('');
+  const [reportType, setReportType] = useState('species');
   const [projectId, setProjectId] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [reportData, setReportData] = useState(null);
-  const [projects] = useState([
-    { id: 1, name: 'Projet A' },
-    { id: 2, name: 'Projet B' },
-  ]);
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        const response = await apiClient.get('/projects');
+        setProjects(Array.isArray(response.data) ? response.data : []);
+      } catch (err) {
+        console.error('Error loading projects:', err);
+      }
+    };
+    fetchProjects();
+  }, []);
 
   const handleGenerateReport = () => {
+    if (!reportType || !projectId) {
+      setError('Veuillez sélectionner un type de rapport et un projet');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    
     // Simuler génération de rapport
-    setReportData({
-      species: [
-        { name: 'Lion', count: 10 },
-        { name: 'Éléphant', count: 5 },
-        { name: 'Girafe', count: 3 },
-      ],
-      totalImages: 50,
-      period: `${startDate} - ${endDate}`,
-    });
+    setTimeout(() => {
+      setReportData({
+        species: [
+          { name: 'Lion', count: 10 },
+          { name: 'Éléphant', count: 5 },
+          { name: 'Girafe', count: 3 },
+        ],
+        totalImages: 50,
+        period: startDate && endDate ? `${startDate} - ${endDate}` : 'Toute la période',
+      });
+      setLoading(false);
+    }, 1000);
   };
 
   return (
@@ -31,15 +53,17 @@ const Reports = () => {
         Rapports
       </Typography>
 
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
       <Grid container spacing={3}>
-        <Grid item xs={12}>
+        <Grid size={{ xs: 12 }}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
                 Générer un Rapport
               </Typography>
               <Grid container spacing={2}>
-                <Grid item xs={12} md={3}>
+                <Grid size={{ xs: 12, md: 3 }}>
                   <FormControl fullWidth>
                     <InputLabel>Type de Rapport</InputLabel>
                     <Select
@@ -52,7 +76,7 @@ const Reports = () => {
                     </Select>
                   </FormControl>
                 </Grid>
-                <Grid item xs={12} md={3}>
+                <Grid size={{ xs: 12, md: 3 }}>
                   <FormControl fullWidth>
                     <InputLabel>Projet</InputLabel>
                     <Select
@@ -68,7 +92,7 @@ const Reports = () => {
                     </Select>
                   </FormControl>
                 </Grid>
-                <Grid item xs={12} md={3}>
+                <Grid size={{ xs: 12, md: 3 }}>
                   <TextField
                     fullWidth
                     label="Date de début"
@@ -78,7 +102,7 @@ const Reports = () => {
                     InputLabelProps={{ shrink: true }}
                   />
                 </Grid>
-                <Grid item xs={12} md={3}>
+                <Grid size={{ xs: 12, md: 3 }}>
                   <TextField
                     fullWidth
                     label="Date de fin"
@@ -88,9 +112,9 @@ const Reports = () => {
                     InputLabelProps={{ shrink: true }}
                   />
                 </Grid>
-                <Grid item xs={12}>
-                  <Button variant="contained" onClick={handleGenerateReport}>
-                    Générer Rapport
+                <Grid size={{ xs: 12 }}>
+                  <Button variant="contained" onClick={handleGenerateReport} disabled={loading}>
+                    {loading ? <CircularProgress size={20} color="inherit" /> : 'Générer Rapport'}
                   </Button>
                 </Grid>
               </Grid>
@@ -100,7 +124,7 @@ const Reports = () => {
 
         {reportData && (
           <>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Card>
                 <CardContent>
                   <Typography variant="h6" gutterBottom>
@@ -112,7 +136,7 @@ const Reports = () => {
               </Card>
             </Grid>
 
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Card>
                 <CardContent>
                   <Typography variant="h6" gutterBottom>

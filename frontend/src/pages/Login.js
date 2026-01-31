@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, TextField, Button, Typography, Paper, Grid } from '@mui/material';
+import { Grid, Box, TextField, Button, Typography, Paper } from '@mui/material';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -66,7 +66,7 @@ const Login = () => {
             Se connecter
           </Button>
           <Grid container justifyContent="center">
-            <Grid item>
+            <Grid size="auto">
               <Link to="/register" style={{ textDecoration: 'none' }}>
                 <Typography variant="body2" color="primary">
                   Pas de compte ? S'inscrire

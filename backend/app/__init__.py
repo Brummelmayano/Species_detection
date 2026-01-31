@@ -1,7 +1,8 @@
 from contextlib import asynccontextmanager
+import tempfile
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.staticfiles import StaticFiles
 from .routers import auth, projects, images
 from .database import engine, Base
 from . import models
@@ -23,22 +24,19 @@ app = FastAPI(
 # Configuration CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # À configurer selon les besoins en production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-)
-
-# Middleware de sécurité pour les hôtes de confiance
-app.add_middleware(
-    TrustedHostMiddleware,
-    allowed_hosts=["localhost", "127.0.0.1", "0.0.0.0"]  # À configurer selon l'environnement
 )
 
 # Inclure les routers
 app.include_router(auth, prefix="/auth", tags=["authentification"])
 app.include_router(projects, prefix="/projects", tags=["projets"])
 app.include_router(images, prefix="/images", tags=["images"])
+
+# Monter le répertoire temporaire pour servir les fichiers uploadés
+app.mount("/temp", StaticFiles(directory=tempfile.gettempdir()), name="temp")
 
 @app.get("/")
 async def root():

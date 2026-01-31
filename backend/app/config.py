@@ -3,6 +3,10 @@ from typing import Optional
 
 class Settings(BaseSettings):
     # Base de données
+    # Par défaut, utilise PostgreSQL pour éviter l'usage accidentel de SQLite en production.
+    # Pour le développement local, définir DATABASE_URL dans .env vers SQLite si besoin.
+    # Exemple production : postgresql://user:password@localhost/species_detection
+    # Exemple développement : sqlite:///./species_detection.db
     database_url: str = "postgresql://user:password@localhost/species_detection"
 
     # JWT
@@ -23,7 +27,13 @@ class Settings(BaseSettings):
     # Redis (pour Celery)
     redis_url: str = "redis://localhost:6379/0"
 
+
     class Config:
         env_file = ".env"
+
+# IMPORTANT :
+# En production, il est impératif de définir la variable d'environnement DATABASE_URL
+# vers une base PostgreSQL pour éviter l'utilisation accidentelle de SQLite.
+# Voir la documentation dans README.md pour plus de détails.
 
 settings = Settings()

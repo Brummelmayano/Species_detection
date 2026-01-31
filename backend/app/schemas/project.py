@@ -21,7 +21,7 @@ class Project(ProjectBase):
     owner_id: int
     created_at: datetime
     updated_at: Optional[datetime]
-    owner: User
+    owner: Optional[User] = None
 
     class Config:
         from_attributes = True

@@ -3,7 +3,6 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from functools import wraps
 from .. import database, models
 from ..schemas import UserCreate, UserUpdate, User, Token, UserRole
 from ..services.auth_service import AuthService
@@ -32,27 +31,6 @@ def get_current_active_user(current_user: models.User = Depends(get_current_user
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
 
-def require_role(required_role: UserRole):
-    def decorator(func):
-        @wraps(func)
-        async def wrapper(*args, **kwargs):
-            current_user = kwargs.get('current_user')
-            if not current_user:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="User dependency not found"
-                )
-
-            user_role = UserRole(current_user.role)
-            if user_role != required_role and user_role != UserRole.ADMIN:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Insufficient permissions"
-                )
-
-            return await func(*args, **kwargs)
-        return wrapper
-    return decorator
 
 @router.post("/register", response_model=Token)
 async def register(user: UserCreate, db: Session = Depends(database.get_db)):
@@ -78,7 +56,6 @@ async def read_users_me(current_user: models.User = Depends(get_current_active_u
     return current_user
 
 @router.get("/users", response_model=List[User])
-@require_role(UserRole.ADMIN)
 async def get_users(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
@@ -93,7 +70,6 @@ async def get_users(
     return users
 
 @router.put("/users/{user_id}", response_model=User)
-@require_role(UserRole.ADMIN)
 async def update_user(
     user_id: int,
     user_update: UserUpdate,
@@ -107,12 +83,18 @@ async def update_user(
     return user
 
 @router.delete("/users/{user_id}")
-@require_role(UserRole.ADMIN)
 async def delete_user(
     user_id: int,
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(get_current_active_user)
 ):
+    user_role = UserRole(current_user.role)
+    if user_role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions"
+        )
+
     user_repo = UserRepository(db)
     user = user_repo.delete_user(user_id)
     if user is None:

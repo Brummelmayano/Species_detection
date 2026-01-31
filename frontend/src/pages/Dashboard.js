@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Grid, Card, CardContent, Typography, Button, Box, List, ListItem, ListItemText } from '@mui/material';
+import { Grid, Card, CardContent, Typography, Button, Box, List, ListItem, ListItemText, CircularProgress, Alert } from '@mui/material';
 import { Link } from 'react-router-dom';
-import axios from 'axios';
+import apiClient from '../config/api';
 
 const Dashboard = () => {
   const [stats, setStats] = useState({
@@ -10,25 +10,59 @@ const Dashboard = () => {
     activeProjects: 0,
   });
   const [recentProjects, setRecentProjects] = useState([]);
-  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    // Simuler la récupération des données (remplacer par appels API réels)
-    setStats({
-      imagesProcessed: 1234,
-      speciesDetected: 56,
-      activeProjects: 3,
-    });
-    setRecentProjects([
-      { id: 1, name: 'Projet A', imageCount: 50 },
-      { id: 2, name: 'Projet B', imageCount: 120 },
-      { id: 3, name: 'Projet C', imageCount: 75 },
-    ]);
-    setNotifications([
-      'Traitement terminé pour batch XYZ',
-      'Nouvelle espèce détectée',
-    ]);
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        const response = await apiClient.get('/projects');
+        const projects = Array.isArray(response.data) ? response.data : [];
+
+        // Trier les projets par created_at décroissant
+        const sortedProjects = projects
+          .slice()
+          .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+
+        // Calculer les statistiques globales
+        const imagesProcessed = projects.reduce((sum, p) => sum + (p.image_count || 0), 0);
+        const detectionsCount = projects.reduce((sum, p) => sum + (p.detection_count || 0), 0);
+        const activeProjects = projects.length;
+
+        setStats({
+          imagesProcessed,
+          speciesDetected: detectionsCount,
+          activeProjects,
+        });
+
+        // Prendre les 3 premiers projets triés comme récents
+        setRecentProjects(
+          sortedProjects.slice(0, 3).map((p) => ({
+            id: p.id,
+            name: p.name,
+            imageCount: p.image_count || 0,
+          }))
+        );
+        setError(null);
+      } catch (err) {
+        console.error('Dashboard error:', err);
+        setError('Erreur lors du chargement du dashboard');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
   }, []);
+
+  if (loading) {
+    return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '400px' }}><CircularProgress /></Box>;
+  }
+
+  if (error) {
+    return <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>;
+  }
 
   return (
     <Box>
@@ -38,7 +72,7 @@ const Dashboard = () => {
 
       <Grid container spacing={3}>
         {/* Statistiques Clés */}
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
@@ -50,7 +84,7 @@ const Dashboard = () => {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
@@ -62,7 +96,7 @@ const Dashboard = () => {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
@@ -76,7 +110,7 @@ const Dashboard = () => {
         </Grid>
 
         {/* Actions Rapides */}
-        <Grid item xs={12} md={6}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
@@ -98,7 +132,7 @@ const Dashboard = () => {
         </Grid>
 
         {/* Projets Récents */}
-        <Grid item xs={12} md={6}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
@@ -119,19 +153,15 @@ const Dashboard = () => {
         </Grid>
 
         {/* Notifications */}
-        <Grid item xs={12}>
+        <Grid xs={12}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Notifications
+                Résumé
               </Typography>
-              <List>
-                {notifications.map((notification, index) => (
-                  <ListItem key={index}>
-                    <ListItemText primary={notification} />
-                  </ListItem>
-                ))}
-              </List>
+              <Typography variant="body2">
+                {stats.imagesProcessed} images traitées dans {stats.activeProjects} projets actifs
+              </Typography>
             </CardContent>
           </Card>
         </Grid>

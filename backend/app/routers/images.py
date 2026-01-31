@@ -2,14 +2,26 @@ import os
 import uuid
 import tempfile
 import mimetypes
+import random
 from typing import List
+from datetime import datetime
 from PIL import Image as PILImage
 from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Form
 from sqlalchemy.orm import Session
 from .. import database, models
-from ..schemas import Image, ImageWithUrl, ImageCreate
+from ..schemas import Image, ImageWithUrl, ImageCreate, Detection, ImageWithUrlAndCount
 from ..routers.auth import get_current_user
 from ..services.speciesnet_service import SpeciesNetService
+from ..repositories.detection_repository import DetectionRepository
+
+def parse_captured_at(captured_at_str: str) -> datetime:
+    """Parse captured_at string to datetime, return 400 on invalid format"""
+    if not captured_at_str:
+        return None
+    try:
+        return datetime.fromisoformat(captured_at_str)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Format de captured_at invalide. Utilisez le format ISO 8601.")
 
 router = APIRouter()
 
@@ -68,6 +80,36 @@ def save_temp_file(file: UploadFile) -> str:
 
     return temp_path
 
+def generate_mock_detections(image_id: int, image_width: int, image_height: int) -> List[dict]:
+    """Génère 1-3 détections mock pour une image"""
+    species_list = ["Lion", "Elephant", "Giraffe", "Zebra", "Leopard", "Buffalo", "Rhino", "Cheetah", "Hyena", "Wildebeest"]
+    num_detections = random.randint(1, 3)
+    detections = []
+    
+    for _ in range(num_detections):
+        bbox_x_min = random.uniform(0, image_width * 0.7)
+        bbox_y_min = random.uniform(0, image_height * 0.7)
+        bbox_width = random.uniform(50, image_width * 0.3)
+        bbox_height = random.uniform(50, image_height * 0.3)
+        bbox_x_max = bbox_x_min + bbox_width
+        bbox_y_max = bbox_y_min + bbox_height
+        
+        detection = {
+            "image_id": image_id,
+            "species_name": random.choice(species_list),
+            "confidence_score": round(random.uniform(0.65, 0.98), 2),
+            "bbox_x_min": int(bbox_x_min),
+            "bbox_y_min": int(bbox_y_min),
+            "bbox_x_max": int(bbox_x_max),
+            "bbox_y_max": int(bbox_y_max),
+            "bbox_width": int(bbox_width),
+            "bbox_height": int(bbox_height),
+            "validated": "pending"
+        }
+        detections.append(detection)
+    
+    return detections
+
 @router.post("/upload", response_model=Image)
 async def upload_image(
     project_id: int = Form(...),
@@ -86,6 +128,9 @@ async def upload_image(
     # Sauvegarder temporairement
     temp_path = save_temp_file(file)
 
+    # Parser captured_at
+    parsed_captured_at = parse_captured_at(captured_at)
+
     # Créer l'entrée en base de données
     db_image = models.Image(
         filename=os.path.basename(temp_path),
@@ -97,13 +142,24 @@ async def upload_image(
         height=metadata["height"],
         latitude=latitude,
         longitude=longitude,
-        captured_at=captured_at,
+        captured_at=parsed_captured_at,
         project_id=project_id,
         uploaded_by_id=current_user.id,
         processing_status="pending"
     )
 
     db.add(db_image)
+    db.commit()
+    db.refresh(db_image)
+
+    # Générer les détections mock
+    detection_repo = DetectionRepository(db)
+    mock_detections = generate_mock_detections(db_image.id, db_image.width, db_image.height)
+    detection_repo.bulk_create_detections(mock_detections)
+
+    # Mettre à jour le statut de l'image
+    db_image.processing_status = "completed"
+    db_image.processing_completed_at = datetime.now()
     db.commit()
     db.refresh(db_image)
 
@@ -137,6 +193,9 @@ async def bulk_upload_images(
             # Sauvegarder temporairement
             temp_path = save_temp_file(file)
 
+            # Parser captured_at
+            parsed_captured_at = parse_captured_at(captured_at)
+
             # Créer l'entrée en base de données
             db_image = models.Image(
                 filename=os.path.basename(temp_path),
@@ -148,7 +207,7 @@ async def bulk_upload_images(
                 height=metadata["height"],
                 latitude=latitude,
                 longitude=longitude,
-                captured_at=captured_at,
+                captured_at=parsed_captured_at,
                 project_id=project_id,
                 uploaded_by_id=current_user.id,
                 processing_status="pending"
@@ -168,11 +227,25 @@ async def bulk_upload_images(
     for img in uploaded_images:
         db.refresh(img)
 
+    # Générer les détections mock pour chaque image
+    detection_repo = DetectionRepository(db)
+    for img in uploaded_images:
+        mock_detections = generate_mock_detections(img.id, img.width, img.height)
+        detection_repo.bulk_create_detections(mock_detections)
+        img.processing_status = "completed"
+        img.processing_completed_at = datetime.now()
+
+    db.commit()
+
+    # Rafraîchir toutes les images
+    for img in uploaded_images:
+        db.refresh(img)
+
     # TODO: Déclencher le traitement SpeciesNet en arrière-plan pour toutes les images
 
     return uploaded_images
 
-@router.get("/", response_model=List[ImageWithUrl])
+@router.get("/", response_model=List[ImageWithUrlAndCount])
 async def get_images(
     project_id: int = None,
     skip: int = 0,
@@ -180,23 +253,56 @@ async def get_images(
     db: Session = Depends(database.get_db),
     current_user = Depends(get_current_user)
 ):
-    """Récupère la liste des images avec pagination"""
+    """Récupère la liste des images avec pagination (filtrées par propriété de projet)"""
 
-    query = db.query(models.Image)
+    # Vérifier les permissions : ne montrer que les images des projets de l'utilisateur
+    query = (
+        db.query(models.Image)
+        .join(models.Project, models.Image.project_id == models.Project.id)
+        .filter(models.Project.owner_id == current_user.id)
+    )
 
     if project_id:
+        # Vérifier que le projet appartient à l'utilisateur
+        project = db.query(models.Project).filter(
+            models.Project.id == project_id,
+            models.Project.owner_id == current_user.id
+        ).first()
+        if not project:
+            raise HTTPException(status_code=403, detail="Accès non autorisé à ce projet")
         query = query.filter(models.Image.project_id == project_id)
-
-    # TODO: Vérifier les permissions d'accès au projet
 
     images = query.offset(skip).limit(limit).all()
 
-    # Ajouter les URLs (pour l'instant, URLs temporaires)
+    # Ajouter les URLs et les compteurs de détections
     result = []
     for img in images:
-        img_dict = img.__dict__.copy()
-        img_dict["url"] = f"/temp/{img.filename}"  # TODO: URL MinIO
-        result.append(ImageWithUrl(**img_dict))
+        img_dict = {
+            "id": img.id,
+            "filename": img.filename,
+            "original_filename": img.original_filename,
+            "file_path": img.file_path,
+            "file_size": img.file_size,
+            "mime_type": img.mime_type,
+            "width": img.width,
+            "height": img.height,
+            "latitude": img.latitude,
+            "longitude": img.longitude,
+            "captured_at": img.captured_at,
+            "uploaded_at": img.uploaded_at,
+            "project_id": img.project_id,
+            "uploaded_by_id": img.uploaded_by_id,
+            "processing_status": img.processing_status,
+            "processing_started_at": img.processing_started_at,
+            "processing_completed_at": img.processing_completed_at,
+            "url": f"/temp/{img.filename}",
+        }
+        # Calculer le nombre de détections
+        detection_count = db.query(models.Detection).filter(
+            models.Detection.image_id == img.id
+        ).count()
+        img_dict["detection_count"] = detection_count
+        result.append(ImageWithUrlAndCount(**img_dict))
 
     return result
 
@@ -206,18 +312,68 @@ async def get_image(
     db: Session = Depends(database.get_db),
     current_user = Depends(get_current_user)
 ):
-    """Récupère une image spécifique"""
+    """Récupère une image spécifique (vérification de propriété)"""
 
-    image = db.query(models.Image).filter(models.Image.id == image_id).first()
+    # Vérifier les permissions : l'image doit appartenir à un projet de l'utilisateur
+    image = (
+        db.query(models.Image)
+        .join(models.Project, models.Image.project_id == models.Project.id)
+        .filter(models.Image.id == image_id, models.Project.owner_id == current_user.id)
+        .first()
+    )
+    
     if not image:
         raise HTTPException(status_code=404, detail="Image non trouvée")
 
-    # TODO: Vérifier les permissions d'accès
-
-    img_dict = image.__dict__.copy()
-    img_dict["url"] = f"/temp/{image.filename}"  # TODO: URL MinIO
+    img_dict = {
+        "id": image.id,
+        "filename": image.filename,
+        "original_filename": image.original_filename,
+        "file_path": image.file_path,
+        "file_size": image.file_size,
+        "mime_type": image.mime_type,
+        "width": image.width,
+        "height": image.height,
+        "latitude": image.latitude,
+        "longitude": image.longitude,
+        "captured_at": image.captured_at,
+        "uploaded_at": image.uploaded_at,
+        "project_id": image.project_id,
+        "uploaded_by_id": image.uploaded_by_id,
+        "processing_status": image.processing_status,
+        "processing_started_at": image.processing_started_at,
+        "processing_completed_at": image.processing_completed_at,
+        "project": image.project,
+        "uploaded_by": image.uploaded_by,
+        "detections": image.detections,
+        "url": f"/temp/{image.filename}"
+    }
 
     return ImageWithUrl(**img_dict)
+
+@router.get("/{image_id}/detections", response_model=List[Detection])
+async def get_image_detections(
+    image_id: int,
+    db: Session = Depends(database.get_db),
+    current_user = Depends(get_current_user)
+):
+    """Récupère toutes les détections d'une image (vérification de propriété)"""
+
+    # Vérifier les permissions : l'image doit appartenir à un projet de l'utilisateur
+    image = (
+        db.query(models.Image)
+        .join(models.Project, models.Image.project_id == models.Project.id)
+        .filter(models.Image.id == image_id, models.Project.owner_id == current_user.id)
+        .first()
+    )
+    
+    if not image:
+        raise HTTPException(status_code=403, detail="Accès non autorisé")
+
+    detection_repo = DetectionRepository(db)
+    detections = detection_repo.get_detections_by_image(image_id)
+
+    return detections
 
 @router.delete("/{image_id}")
 async def delete_image(
@@ -225,13 +381,18 @@ async def delete_image(
     db: Session = Depends(database.get_db),
     current_user = Depends(get_current_user)
 ):
-    """Supprime une image"""
+    """Supprime une image (vérification de propriété)"""
 
-    image = db.query(models.Image).filter(models.Image.id == image_id).first()
+    # Vérifier les permissions : l'image doit appartenir à un projet de l'utilisateur
+    image = (
+        db.query(models.Image)
+        .join(models.Project, models.Image.project_id == models.Project.id)
+        .filter(models.Image.id == image_id, models.Project.owner_id == current_user.id)
+        .first()
+    )
+    
     if not image:
-        raise HTTPException(status_code=404, detail="Image non trouvée")
-
-    # TODO: Vérifier les permissions (seul le propriétaire ou admin)
+        raise HTTPException(status_code=403, detail="Accès non autorisé")
 
     # Supprimer le fichier temporaire
     if os.path.exists(image.file_path):

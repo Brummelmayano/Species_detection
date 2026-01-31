@@ -31,10 +31,17 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (username, password) => {
-    const response = await axios.post('http://localhost:8000/auth/login', {
-      username,
-      password,
-    });
+    const response = await axios.post('http://localhost:8000/auth/login',
+      new URLSearchParams({
+        username,
+        password,
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      }
+    );
     const { access_token } = response.data;
     localStorage.setItem('token', access_token);
     axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;

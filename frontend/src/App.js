@@ -11,6 +11,7 @@ import Upload from './pages/Upload';
 import Gallery from './pages/Gallery';
 import ImageViewer from './pages/ImageViewer';
 import Reports from './pages/Reports';
+import Analyzer from './pages/Analyzer';
 
 const theme = createTheme({
   palette: {
@@ -47,6 +48,7 @@ const AppContent = () => {
                   <Route path="/upload" element={<Upload />} />
                   <Route path="/gallery" element={<Gallery />} />
                   <Route path="/image/:id" element={<ImageViewer />} />
+                  <Route path="/analyzer" element={<Analyzer />} />
                   <Route path="/reports" element={<Reports />} />
                 </Routes>
               </Layout>

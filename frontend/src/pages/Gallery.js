@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Grid, Card, CardMedia, CardContent, TextField, FormControl, InputLabel, Select, MenuItem, Button, Pagination } from '@mui/material';
+import { Grid, Box, Typography, Card, CardMedia, CardContent, TextField, FormControl, InputLabel, Select, MenuItem, Button, Pagination, CircularProgress, Alert } from '@mui/material';
 import { Link } from 'react-router-dom';
-import axios from 'axios';
+import apiClient, { API_BASE_URL } from '../config/api';
 
 const Gallery = () => {
   const [images, setImages] = useState([]);
@@ -13,20 +13,62 @@ const Gallery = () => {
   const [projects, setProjects] = useState([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const LIMIT = 20;
+
+  // Helper function to normalize image URL
+  const normalizeImageUrl = (url) => {
+    if (!url) return 'https://via.placeholder.com/200';
+    if (url.startsWith('/')) {
+      return `${API_BASE_URL}${url}`;
+    }
+    return url;
+  };
 
   useEffect(() => {
-    // Simuler récupération des projets et images
-    setProjects([
-      { id: 1, name: 'Projet A' },
-      { id: 2, name: 'Projet B' },
-    ]);
-    setImages([
-      { id: 1, url: 'https://via.placeholder.com/200', species: 'Espèce A', projectId: 1 },
-      { id: 2, url: 'https://via.placeholder.com/200', species: 'Espèce B', projectId: 2 },
-      // Ajouter plus d'images simulées
-    ]);
-    setTotalPages(5);
-  }, [filters, page]);
+    const fetchGalleryData = async () => {
+      try {
+        setLoading(true);
+        // Récupérer les projets pour le filtre
+        const projectsResponse = await apiClient.get('/projects/');
+        setProjects(projectsResponse.data);
+
+        // Récupérer les images avec pagination
+        const params = {
+          skip: (page - 1) * LIMIT,
+          limit: LIMIT,
+        };
+        if (filters.projectId) {
+          params.project_id = filters.projectId;
+        }
+
+        const imagesResponse = await apiClient.get('/images/', { params });
+        setImages(imagesResponse.data);
+
+        // Améliorer le calcul de totalPages
+        // Si la réponse retourne le nombre exact ou si on a reçu LIMIT éléments, on peut estimer qu'il y a plus
+        setTotalPages((prev) => {
+          if (imagesResponse.data.length === LIMIT) {
+            return Math.max(prev, page + 1);
+          }
+          return Math.max(prev, page);
+        });
+        setError(null);
+      } catch (err) {
+        console.error('Gallery error:', err);
+        setError('Erreur lors du chargement de la galerie');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchGalleryData();
+  }, [page, filters.projectId]);
+
+  if (loading) {
+    return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '400px' }}><CircularProgress /></Box>;
+  }
 
   const handleFilterChange = (field, value) => {
     setFilters({ ...filters, [field]: value });
@@ -34,9 +76,13 @@ const Gallery = () => {
   };
 
   const handleSearch = () => {
-    // Appliquer les filtres
+    // Les filtres sont appliqués automatiquement via useEffect
     console.log('Recherche avec filtres:', filters);
   };
+
+  if (error) {
+    return <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>;
+  }
 
   return (
     <Box>
@@ -46,7 +92,7 @@ const Gallery = () => {
 
       {/* Filtres */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={3}>
+        <Grid size={{ xs: 12, md: 3 }}>
           <FormControl fullWidth>
             <InputLabel>Projet</InputLabel>
             <Select
@@ -62,7 +108,7 @@ const Gallery = () => {
             </Select>
           </FormControl>
         </Grid>
-        <Grid item xs={12} md={3}>
+        <Grid size={{ xs: 12, md: 3 }}>
           <TextField
             fullWidth
             label="Espèce"
@@ -70,7 +116,7 @@ const Gallery = () => {
             onChange={(e) => handleFilterChange('species', e.target.value)}
           />
         </Grid>
-        <Grid item xs={12} md={3}>
+        <Grid size={{ xs: 12, md: 3 }}>
           <TextField
             fullWidth
             label="Date"
@@ -80,7 +126,7 @@ const Gallery = () => {
             InputLabelProps={{ shrink: true }}
           />
         </Grid>
-        <Grid item xs={12} md={3}>
+        <Grid size={{ xs: 12, md: 3 }}>
           <Button variant="contained" onClick={handleSearch} fullWidth>
             Rechercher
           </Button>
@@ -90,17 +136,17 @@ const Gallery = () => {
       {/* Grille d'images */}
       <Grid container spacing={2}>
         {images.map((image) => (
-          <Grid item xs={12} sm={6} md={4} lg={3} key={image.id}>
+          <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={image.id}>
             <Card component={Link} to={`/image/${image.id}`} sx={{ textDecoration: 'none' }}>
               <CardMedia
                 component="img"
                 height="200"
-                image={image.url}
-                alt={image.species}
+                image={normalizeImageUrl(image.url)}
+                alt={`Image ${image.id}`}
               />
               <CardContent>
                 <Typography variant="body2" color="text.secondary">
-                  {image.species}
+                  {image.detection_count || 0} détections
                 </Typography>
               </CardContent>
             </Card>

@@ -50,3 +50,28 @@ class ImageWithUrl(Image):
 
     class Config:
         from_attributes = True
+
+class ImageWithUrlAndCount(BaseModel):
+    """Schéma pour les listes d'images avec URL et compteur de détections"""
+    id: int
+    filename: str
+    original_filename: str
+    file_path: str
+    file_size: Optional[int] = None
+    mime_type: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    captured_at: Optional[datetime] = None
+    uploaded_at: datetime
+    project_id: int
+    uploaded_by_id: int
+    processing_status: str
+    processing_started_at: Optional[datetime]
+    processing_completed_at: Optional[datetime]
+    url: str
+    detection_count: int = 0
+
+    class Config:
+        from_attributes = True

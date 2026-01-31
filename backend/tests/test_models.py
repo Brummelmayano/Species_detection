@@ -41,7 +41,7 @@ class TestUserModel:
         assert user.hashed_password == "hashedpass"
         assert user.full_name == "Test User"
         assert user.is_active == True
-        assert user.is_admin == False
+        assert user.role == "viewer"  # Default role
 
     def test_user_unique_constraints(self, db_session):
         # Créer le premier utilisateur
